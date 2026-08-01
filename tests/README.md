@@ -25,6 +25,27 @@ API key that can manage custom roles is available, running them unchanged is the
 badge naming a real, understood gap is worth more than a green one that proves nothing. Everything
 below describes coverage the suite *will* provide once it can run.
 
+### The access the suite needs, and does not have
+
+`TEMPORAL_CLOUD_API_KEY` is the only credential — nothing here needs a cloud provider account, a
+SCIM integration or any other external access. What is missing is the **permission attached to that
+key**:
+
+| Requirement | Status on the current key |
+| --- | --- |
+| `cloud.customrole.create`, `.update` and `.delete` — the three calls the suite makes. Custom role administration [defaults to the Account Owner](https://docs.temporal.io/cloud/manage-access/custom-roles#delegating-custom-roles) and can be delegated, but Developer and Read-only never carry it | **Missing.** `PermissionDenied` at `CreateCustomRole` |
+| Create and delete a namespace in one region, for the `setup` fixture | Present — the fixture applies and is torn down cleanly, so the orphan check stays green even on a failed run |
+
+Custom roles are also still a **prerelease** feature, so an account may need them enabled at all
+before any key can manage them. The failure alone does not distinguish "key lacks the permission"
+from "account lacks the feature"; both are resolved by pointing the suite at an Account Owner key on
+an account with custom roles enabled.
+
+Until such a key exists, nothing about the API's own behaviour is verified: the six `resource_type`
+values, `allow_all` versus `resource_ids`, the round trip of `actions`, whether an update replaces
+the permission set rather than merging into it, the reported `state`, and whether a role is actually
+deleted on teardown. All of those are asserted by the suite and none has ever executed.
+
 | Path | Runs on | Credentials |
 | --- | --- | --- |
 | `local/` | every pull request | no |
