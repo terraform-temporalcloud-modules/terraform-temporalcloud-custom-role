@@ -33,13 +33,25 @@ key**:
 
 | Requirement | Status on the current key |
 | --- | --- |
-| `cloud.customrole.create`, `.update` and `.delete` — the three calls the suite makes. Custom role administration [defaults to the Account Owner](https://docs.temporal.io/cloud/manage-access/custom-roles#delegating-custom-roles) and can be delegated, but Developer and Read-only never carry it | **Missing.** `PermissionDenied` at `CreateCustomRole` |
+| `cloud.customrole.create`, `.update` and `.delete` — the three calls the suite makes | **Missing.** `PermissionDenied` at `CreateCustomRole` |
 | Create and delete a namespace in one region, for the `setup` fixture | Present — the fixture applies and is torn down cleanly, so the orphan check stays green even on a failed run |
 
-Custom roles are also still a **prerelease** feature, so an account may need them enabled at all
-before any key can manage them. The failure alone does not distinguish "key lacks the permission"
-from "account lacks the feature"; both are resolved by pointing the suite at an Account Owner key on
-an account with custom roles enabled.
+**A Global Admin key is not sufficient.** Custom role administration
+[defaults to the Account Owner](https://docs.temporal.io/cloud/manage-access/custom-roles#delegating-custom-roles),
+which sits one rung above Global Admin — the two differ in that Owner additionally controls billing
+and account ownership. Both can create namespaces and hold Namespace Admin everywhere, which is why a
+Global Admin key runs every other module in this family and fails only here.
+
+Administration *can* be delegated to Global Admin, but the delegation mechanism is itself a custom
+role containing `cloud.customrole.create` / `.update` / `.assign`, which only an Account Owner can
+create — so an Owner is needed at least once either way. Temporal's own documentation flags that
+delegation as a privilege-escalation risk: a principal holding a custom role that can create custom
+roles can mint further roles carrying operations it was never granted.
+
+Custom roles are also still a **prerelease** feature, so an account may need them enabled before any
+key can manage them. `PermissionDenied` looks identical in both cases and does not distinguish "key
+lacks the permission" from "account lacks the feature". Either is resolved by running the suite with
+an Account Owner key on an account with custom roles enabled.
 
 Until such a key exists, nothing about the API's own behaviour is verified: the six `resource_type`
 values, `allow_all` versus `resource_ids`, the round trip of `actions`, whether an update replaces
