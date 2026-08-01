@@ -9,7 +9,7 @@ variable "create_custom_role" {
 ################################################################################
 
 variable "name" {
-  description = "The name of the custom role. Up to 64 characters of letters, numbers, hyphens and underscores. Names are not unique within an account, so two roles may share one. Required unless `create_custom_role` is `false`"
+  description = "Required when `create_custom_role` is `true`. The name of the custom role. Up to 64 characters of letters, numbers, hyphens and underscores. Names are not unique within an account, so two roles may share one. Nothing rejects the empty default, so an omitted name reaches the API as an empty one"
   type        = string
   default     = ""
 
@@ -22,7 +22,7 @@ variable "name" {
 }
 
 variable "description" {
-  description = "Description of the custom role, up to 256 characters"
+  description = "Optional. Description of the custom role, up to 256 characters. Left out, the role is created with an empty description"
   type        = string
   default     = null
 
@@ -34,9 +34,13 @@ variable "description" {
 
 variable "permissions" {
   description = <<-EOT
-    Permissions granted by the role, as a list of `{ actions, resources }` entries. At least one is
-    required and a role may hold at most 20. Updating this variable replaces the role's whole
-    permission set, so every permission to keep must be listed.
+    Required when `create_custom_role` is `true`. Permissions granted by the role, as a list of
+    `{ actions, resources }` entries. At least one is required and a role may hold at most 20.
+    Updating this variable replaces the role's whole permission set, so every permission to keep must
+    be listed.
+
+    Within an entry, only `resources.allow_all` may be left out: `actions`, `resources`,
+    `resources.resource_type` and `resources.resource_ids` are all required.
 
     `actions` is a set of Temporal Cloud action strings such as `cloud.namespace.get`; see the
     [Custom Role permissions reference](https://docs.temporal.io/cloud/manage-access/permissions-reference#custom-role-permissions-reference).
@@ -53,8 +57,6 @@ variable "permissions" {
     `resource_ids = []` — `resource_ids` has no default, so the empty list must be written out. To
     scope the permission, list the IDs and leave `allow_all` unset. Each ID must already exist in the
     account.
-
-    Required unless `create_custom_role` is `false`.
   EOT
 
   type = list(object({
@@ -109,7 +111,7 @@ variable "permissions" {
 }
 
 variable "timeouts" {
-  description = "Create, update and delete timeouts, as duration strings such as `30s` or `2h45m`"
+  description = "Optional. Create, update and delete timeouts, as duration strings such as `30s` or `2h45m`. Left out, the provider's own defaults apply"
   type = object({
     create = optional(string)
     update = optional(string)

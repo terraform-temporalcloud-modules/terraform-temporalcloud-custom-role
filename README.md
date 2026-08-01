@@ -228,6 +228,59 @@ module "custom_roles" {
 }
 ```
 
+## Which inputs are required
+
+The generated table below reports `Required: no` for every input. That is a property of the
+`create_custom_role` gate rather than of the API: every input carries a default so that
+`create_custom_role = false` switches the module off without values being supplied for attributes the
+provider marks required. With the gate left on, the requirements are these.
+
+### Always required
+
+| Input | If you leave it out |
+| --- | --- |
+| `name` | Nothing local stops you: this module's name check accepts the empty default and the provider has no validator on `name`, so the create request carries an empty one. A name is required, and capped at 64 characters, by the [custom role documentation](https://docs.temporal.io/cloud/manage-access/custom-roles) |
+| `permissions` | At least one entry is required, in the provider schema and in the documentation. The provider reports `Attribute permissions list must contain at least 1 elements, got: 0` |
+
+### Conditionally required — the keys inside `permissions`
+
+The generated table shows the *type* of `permissions` but not which keys within it may be left out.
+Only `allow_all` may:
+
+| Key | Required | Notes |
+| --- | --- | --- |
+| `actions` | yes | At least one. An empty set is refused by this module — `Every permission must grant at least one action.` — and by the provider |
+| `resources` | yes | The object carrying the three keys below |
+| `resources.resource_type` | yes | One of the six plural, hyphenated values above |
+| `resources.resource_ids` | yes | **Written out even for an allow-all permission**, as `resource_ids = []`. It has no default, so omitting it fails at validate with `attribute "resources": attribute "resource_ids" is required.` |
+| `resources.allow_all` | conditionally | `true` exactly when `resource_ids` is empty; omitted otherwise |
+
+The last two are one rule, not two — see
+[Exactly one of `allow_all` and `resource_ids`](#exactly-one-of-allow_all-and-resource_ids) for the two
+shapes and the errors each mistake produces.
+
+### Optional
+
+- **Wording** — `description`. Left out, the role is created with an empty description.
+- **Timing** — `timeouts`. Left out, the provider's own create, update and delete timeouts apply.
+- **The gate** — `create_custom_role`. Left at `true`, the role is created.
+
+### Two caps this module applies itself
+
+At most 20 permissions and a description of at most 256 characters. Neither is a provider check: both
+are variable validations here, taken from the
+[Custom Role limits](https://docs.temporal.io/cloud/limits#custom-role-limits) and the
+[custom role documentation](https://docs.temporal.io/cloud/manage-access/custom-roles) respectively.
+That page's Cloud CLI tab gives 25 permissions per role instead, as an account default that may vary;
+this module holds to the 20 the limits page documents.
+
+### `terraform validate` will not tell you a required input is missing
+
+Values passed into a module are not resolved during the validate walk, so the provider's validators
+never see them there: a call to this module with neither `name` nor `permissions` validates clean.
+This module's own variable validations *do* run at validate — including the four `permissions` rules —
+while the provider's checks wait for plan, which needs an API key.
+
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
 
@@ -257,10 +310,10 @@ No modules.
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_create_custom_role"></a> [create\_custom\_role](#input\_create\_custom\_role) | Controls if the custom role should be created. Set to `false` to disable the module without removing the call | `bool` | `true` | no |
-| <a name="input_description"></a> [description](#input\_description) | Description of the custom role, up to 256 characters | `string` | `null` | no |
-| <a name="input_name"></a> [name](#input\_name) | The name of the custom role. Up to 64 characters of letters, numbers, hyphens and underscores. Names are not unique within an account, so two roles may share one. Required unless `create_custom_role` is `false` | `string` | `""` | no |
-| <a name="input_permissions"></a> [permissions](#input\_permissions) | Permissions granted by the role, as a list of `{ actions, resources }` entries. At least one is<br/>required and a role may hold at most 20. Updating this variable replaces the role's whole<br/>permission set, so every permission to keep must be listed.<br/><br/>`actions` is a set of Temporal Cloud action strings such as `cloud.namespace.get`; see the<br/>[Custom Role permissions reference](https://docs.temporal.io/cloud/manage-access/permissions-reference#custom-role-permissions-reference).<br/>An action is only valid against the resource types that reference lists for it — for example<br/>`cloud.namespace.list` is listed against `accounts` and `projects`, while `cloud.namespace.get` is<br/>listed against `namespaces`. The pairing is not validated here or by the provider.<br/><br/>`resources.resource_type` is one of `accounts`, `projects`, `namespaces`, `nexus-endpoints`,<br/>`connectivity-rules` or `custom-roles`. These are plural and hyphenated; the singular forms<br/>`account` and `namespace` are rejected.<br/><br/>`resources.resource_ids` and `resources.allow_all` are mutually exclusive and exactly one must be<br/>supplied. To grant a permission over every resource of the type, set `allow_all = true` and pass<br/>`resource_ids = []` — `resource_ids` has no default, so the empty list must be written out. To<br/>scope the permission, list the IDs and leave `allow_all` unset. Each ID must already exist in the<br/>account.<br/><br/>Required unless `create_custom_role` is `false`. | <pre>list(object({<br/>    actions = set(string)<br/>    resources = object({<br/>      allow_all     = optional(bool)<br/>      resource_ids  = set(string)<br/>      resource_type = string<br/>    })<br/>  }))</pre> | `[]` | no |
-| <a name="input_timeouts"></a> [timeouts](#input\_timeouts) | Create, update and delete timeouts, as duration strings such as `30s` or `2h45m` | <pre>object({<br/>    create = optional(string)<br/>    update = optional(string)<br/>    delete = optional(string)<br/>  })</pre> | `{}` | no |
+| <a name="input_description"></a> [description](#input\_description) | Optional. Description of the custom role, up to 256 characters. Left out, the role is created with an empty description | `string` | `null` | no |
+| <a name="input_name"></a> [name](#input\_name) | Required when `create_custom_role` is `true`. The name of the custom role. Up to 64 characters of letters, numbers, hyphens and underscores. Names are not unique within an account, so two roles may share one. Nothing rejects the empty default, so an omitted name reaches the API as an empty one | `string` | `""` | no |
+| <a name="input_permissions"></a> [permissions](#input\_permissions) | Required when `create_custom_role` is `true`. Permissions granted by the role, as a list of<br/>`{ actions, resources }` entries. At least one is required and a role may hold at most 20.<br/>Updating this variable replaces the role's whole permission set, so every permission to keep must<br/>be listed.<br/><br/>Within an entry, only `resources.allow_all` may be left out: `actions`, `resources`,<br/>`resources.resource_type` and `resources.resource_ids` are all required.<br/><br/>`actions` is a set of Temporal Cloud action strings such as `cloud.namespace.get`; see the<br/>[Custom Role permissions reference](https://docs.temporal.io/cloud/manage-access/permissions-reference#custom-role-permissions-reference).<br/>An action is only valid against the resource types that reference lists for it — for example<br/>`cloud.namespace.list` is listed against `accounts` and `projects`, while `cloud.namespace.get` is<br/>listed against `namespaces`. The pairing is not validated here or by the provider.<br/><br/>`resources.resource_type` is one of `accounts`, `projects`, `namespaces`, `nexus-endpoints`,<br/>`connectivity-rules` or `custom-roles`. These are plural and hyphenated; the singular forms<br/>`account` and `namespace` are rejected.<br/><br/>`resources.resource_ids` and `resources.allow_all` are mutually exclusive and exactly one must be<br/>supplied. To grant a permission over every resource of the type, set `allow_all = true` and pass<br/>`resource_ids = []` — `resource_ids` has no default, so the empty list must be written out. To<br/>scope the permission, list the IDs and leave `allow_all` unset. Each ID must already exist in the<br/>account. | <pre>list(object({<br/>    actions = set(string)<br/>    resources = object({<br/>      allow_all     = optional(bool)<br/>      resource_ids  = set(string)<br/>      resource_type = string<br/>    })<br/>  }))</pre> | `[]` | no |
+| <a name="input_timeouts"></a> [timeouts](#input\_timeouts) | Optional. Create, update and delete timeouts, as duration strings such as `30s` or `2h45m`. Left out, the provider's own defaults apply | <pre>object({<br/>    create = optional(string)<br/>    update = optional(string)<br/>    delete = optional(string)<br/>  })</pre> | `{}` | no |
 
 ## Outputs
 
