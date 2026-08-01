@@ -73,15 +73,21 @@ the root module, add the matching line to the wrapper in the same change.
 
 `permissions` is validated for shape, not content:
 
-- **`resource_type` is checked against the six wire values** the Cloud Ops API accepts. That list is
-  small and stable, and the plural, hyphenated spelling is the mistake consumers make first.
+- **`resource_type` is checked against the six wire values** the Cloud Ops API accepts. The list is
+  small and stable, and the plural, kebab-case spelling is the mistake consumers make first — provider
+  v1.6.0 ships an example using the singular `account`, which does not work. Upstream
+  [fixed that example after v1.6.0](https://github.com/temporalio/terraform-provider-temporalcloud/commit/03c4287c)
+  and added the same six-value check to the provider, so this validation becomes redundant once
+  consumers move past v1.6.0. Keep it while `required_providers` still admits v1.6.0.
 - **Actions are only checked for the `cloud.` prefix.** The set of action strings grows with the Cloud
   Ops API, so an allowlist here would reject new actions until this module cut a release. The prefix
   check still catches the common error of passing an API operation name such as `GetNamespace`.
-- **Action-to-resource-type pairing is not checked at all.** An action granted on the wrong resource
-  type is accepted by the API and produces a role that silently grants nothing. Encoding the mapping
-  would mean shipping the whole permissions reference in a variable validation and re-releasing
-  whenever it changed.
+- **Action-to-resource-type pairing is not checked at all.** Encoding the mapping would mean shipping
+  the whole permissions reference in a variable validation and re-releasing whenever it changed. Note
+  the mapping is not one-to-one: `cloud.namespace.list`, `cloud.nexusendpoint.list` and
+  `cloud.connectivityrule.list` are each valid against both `accounts` and `projects`. What the API
+  does with a mismatched pair has not been established — the apply suite has never reached a Temporal
+  Cloud account that permits `CreateCustomRole`, so do not document a behaviour for it.
 
 There is no `permissions` non-empty check, because it would have to be conditional on
 `create_custom_role` and cross-variable validation needs Terraform 1.9 — above this module's
@@ -89,13 +95,17 @@ There is no `permissions` non-empty check, because it would have to be condition
 
 ## API behaviours the tests guard against
 
-Each of these passes `terraform validate` and fails only on apply or at plan-time provider validation.
-They are the reason the apply layer exists.
+These fail on apply, or earlier through provider-side config validation. They are the reason the apply
+layer exists.
 
 1. **`resource_ids` and `allow_all` are mutually exclusive, and exactly one is required.** The provider
-   validates this at plan with `resource_ids must be empty when allow_all is true.` and
-   `allow_all must be true when resource_ids is empty.` `resource_ids` has no schema default, so an
-   allow-all permission must still write out `resource_ids = []`.
+   implements this as a resource `ValidateConfig`, so it fires during `terraform validate` — no
+   credentials needed — with `resource_ids must be empty when allow_all is true.`,
+   `allow_all cannot be true when resource_ids contains values.` and
+   `allow_all must be true when resource_ids is empty.` This module's `permissions` validation encodes
+   the same rule and reports first, so a consumer sees the module's message rather than these.
+   `resource_ids` has no schema default, so an allow-all permission must still write out
+   `resource_ids = []`.
 2. **Resource IDs must already exist in the account.** An unknown ID is rejected, which is why
    `tests/setup/` creates a namespace instead of using a literal.
 3. **An update replaces the entire permission set.** Anything omitted is revoked.

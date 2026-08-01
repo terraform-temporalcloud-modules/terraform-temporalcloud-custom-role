@@ -118,6 +118,12 @@ accounts   projects   namespaces   nexus-endpoints   connectivity-rules   custom
 The singular forms `account` and `namespace` are **not** accepted. This module rejects an unknown value
 at plan; without that check, the API rejects it on apply.
 
+Worth knowing if you start from the provider's own page: the `temporalcloud_custom_role` example
+published with provider v1.6.0 uses `resource_type = "account"`, which does not work. Upstream
+[corrected it after v1.6.0](https://github.com/temporalio/terraform-provider-temporalcloud/commit/03c4287c)
+— "the provider example used `account` but the Cloud Ops API expects plural kebab-case values like
+`accounts`" — and added the same six-value check to the provider itself.
+
 ### Exactly one of `allow_all` and `resource_ids`
 
 `resource_ids` is a required attribute with no default, and `allow_all` is optional. They are mutually
@@ -139,26 +145,29 @@ resources = {
 }
 ```
 
-Getting it wrong fails at plan with one of:
+Getting it wrong fails at plan, before anything is sent to Temporal Cloud:
 
 ```text
-resource_ids must be empty when allow_all is true.
-allow_all cannot be true when resource_ids contains values.
-allow_all must be true when resource_ids is empty.
+Each permission must set either allow_all = true with resource_ids = [], or a non-empty
+resource_ids with allow_all unset. Setting both, or neither, is rejected.
 ```
+
+The provider enforces the same rule independently, so the constraint holds whether or not a
+configuration goes through this module.
 
 Every ID in `resource_ids` must already exist in the account; an unknown one is rejected at apply.
 
-### Each action belongs to one resource type
+### Actions are scoped to a resource type
 
-Action strings look like `cloud.namespace.get`, and each is valid against exactly one resource type.
-The pairing is not always the obvious one — `cloud.namespace.list` returns the account's namespaces and
-is an `accounts` action, while `cloud.namespace.get` reads one and is a `namespaces` action.
+Action strings look like `cloud.namespace.get`. An action is valid only against the resource types the
+[Custom Role permissions reference](https://docs.temporal.io/cloud/manage-access/permissions-reference#custom-role-permissions-reference)
+lists for it, and the pairing is not always the obvious one — `cloud.namespace.list` returns the
+account's namespaces and so is listed against `accounts` and `projects`, while `cloud.namespace.get`
+reads a single namespace and is listed against `namespaces`. Most actions map to one resource type;
+a few, all of them `list` actions, map to two.
 
-Pairing an action with the wrong resource type is **accepted** by the API and produces a role that
-grants nothing. There is no error to notice, so check each action against the
-[Custom Role permissions reference](https://docs.temporal.io/cloud/manage-access/permissions-reference#custom-role-permissions-reference),
-which lists the resource type for every action.
+Neither this module nor the provider checks the pairing, so look each action up in that reference
+rather than inferring its resource type from its name.
 
 This module validates only that actions begin with `cloud.`, deliberately: the action list grows with
 the Cloud Ops API, and an allowlist here would reject new actions until this module cut a release.
@@ -250,7 +259,7 @@ No modules.
 | <a name="input_create_custom_role"></a> [create\_custom\_role](#input\_create\_custom\_role) | Controls if the custom role should be created. Set to `false` to disable the module without removing the call | `bool` | `true` | no |
 | <a name="input_description"></a> [description](#input\_description) | Description of the custom role, up to 256 characters | `string` | `null` | no |
 | <a name="input_name"></a> [name](#input\_name) | The name of the custom role. Up to 64 characters of letters, numbers, hyphens and underscores. Names are not unique within an account, so two roles may share one. Required unless `create_custom_role` is `false` | `string` | `""` | no |
-| <a name="input_permissions"></a> [permissions](#input\_permissions) | Permissions granted by the role, as a list of `{ actions, resources }` entries. At least one is<br/>required and a role may hold at most 20. Updating this variable replaces the role's whole<br/>permission set, so every permission to keep must be listed.<br/><br/>`actions` is a set of Temporal Cloud action strings such as `cloud.namespace.get`; see the<br/>[Custom Role permissions reference](https://docs.temporal.io/cloud/manage-access/permissions-reference#custom-role-permissions-reference).<br/>Each action is only valid against the resource type that reference lists for it — for example<br/>`cloud.namespace.list` is an `accounts` action while `cloud.namespace.get` is a `namespaces` one.<br/><br/>`resources.resource_type` is one of `accounts`, `projects`, `namespaces`, `nexus-endpoints`,<br/>`connectivity-rules` or `custom-roles`. These are plural and hyphenated; the singular forms<br/>`account` and `namespace` are rejected.<br/><br/>`resources.resource_ids` and `resources.allow_all` are mutually exclusive and exactly one must be<br/>supplied. To grant a permission over every resource of the type, set `allow_all = true` and pass<br/>`resource_ids = []` — `resource_ids` has no default, so the empty list must be written out. To<br/>scope the permission, list the IDs and leave `allow_all` unset. Each ID must already exist in the<br/>account.<br/><br/>Required unless `create_custom_role` is `false`. | <pre>list(object({<br/>    actions = set(string)<br/>    resources = object({<br/>      allow_all     = optional(bool)<br/>      resource_ids  = set(string)<br/>      resource_type = string<br/>    })<br/>  }))</pre> | `[]` | no |
+| <a name="input_permissions"></a> [permissions](#input\_permissions) | Permissions granted by the role, as a list of `{ actions, resources }` entries. At least one is<br/>required and a role may hold at most 20. Updating this variable replaces the role's whole<br/>permission set, so every permission to keep must be listed.<br/><br/>`actions` is a set of Temporal Cloud action strings such as `cloud.namespace.get`; see the<br/>[Custom Role permissions reference](https://docs.temporal.io/cloud/manage-access/permissions-reference#custom-role-permissions-reference).<br/>An action is only valid against the resource types that reference lists for it — for example<br/>`cloud.namespace.list` is listed against `accounts` and `projects`, while `cloud.namespace.get` is<br/>listed against `namespaces`. The pairing is not validated here or by the provider.<br/><br/>`resources.resource_type` is one of `accounts`, `projects`, `namespaces`, `nexus-endpoints`,<br/>`connectivity-rules` or `custom-roles`. These are plural and hyphenated; the singular forms<br/>`account` and `namespace` are rejected.<br/><br/>`resources.resource_ids` and `resources.allow_all` are mutually exclusive and exactly one must be<br/>supplied. To grant a permission over every resource of the type, set `allow_all = true` and pass<br/>`resource_ids = []` — `resource_ids` has no default, so the empty list must be written out. To<br/>scope the permission, list the IDs and leave `allow_all` unset. Each ID must already exist in the<br/>account.<br/><br/>Required unless `create_custom_role` is `false`. | <pre>list(object({<br/>    actions = set(string)<br/>    resources = object({<br/>      allow_all     = optional(bool)<br/>      resource_ids  = set(string)<br/>      resource_type = string<br/>    })<br/>  }))</pre> | `[]` | no |
 | <a name="input_timeouts"></a> [timeouts](#input\_timeouts) | Create, update and delete timeouts, as duration strings such as `30s` or `2h45m` | <pre>object({<br/>    create = optional(string)<br/>    update = optional(string)<br/>    delete = optional(string)<br/>  })</pre> | `{}` | no |
 
 ## Outputs

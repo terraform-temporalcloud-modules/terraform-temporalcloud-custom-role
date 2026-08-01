@@ -3,12 +3,13 @@
 Configuration in this directory creates the smallest useful custom role: read access to every
 namespace in the account, and nothing else.
 
-It takes two permissions rather than one because the two actions belong to different resource types.
-`cloud.namespace.list` returns the account's namespaces and is granted on `accounts`;
-`cloud.namespace.get` reads a single namespace and is granted on `namespaces`. Pairing an action with
-the wrong resource type is accepted at plan and produces a role that grants nothing useful — the
-[Custom Role permissions reference](https://docs.temporal.io/cloud/manage-access/permissions-reference#custom-role-permissions-reference)
-lists the resource type for each action.
+It takes two permissions rather than one because the two actions are scoped to different resource
+types. `cloud.namespace.list` returns the account's namespaces and is granted on `accounts`;
+`cloud.namespace.get` reads a single namespace and is granted on `namespaces`. Neither this module nor
+the provider checks that an action matches the resource type it is granted on, so look each action up
+in the
+[Custom Role permissions reference](https://docs.temporal.io/cloud/manage-access/permissions-reference#custom-role-permissions-reference),
+which lists the resource types every action is valid against.
 
 ## Usage
 

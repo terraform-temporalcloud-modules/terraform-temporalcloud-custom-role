@@ -40,8 +40,9 @@ variable "permissions" {
 
     `actions` is a set of Temporal Cloud action strings such as `cloud.namespace.get`; see the
     [Custom Role permissions reference](https://docs.temporal.io/cloud/manage-access/permissions-reference#custom-role-permissions-reference).
-    Each action is only valid against the resource type that reference lists for it — for example
-    `cloud.namespace.list` is an `accounts` action while `cloud.namespace.get` is a `namespaces` one.
+    An action is only valid against the resource types that reference lists for it — for example
+    `cloud.namespace.list` is listed against `accounts` and `projects`, while `cloud.namespace.get` is
+    listed against `namespaces`. The pairing is not validated here or by the provider.
 
     `resources.resource_type` is one of `accounts`, `projects`, `namespaces`, `nexus-endpoints`,
     `connectivity-rules` or `custom-roles`. These are plural and hyphenated; the singular forms
