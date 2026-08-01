@@ -86,18 +86,28 @@ run "create_role" {
   }
 
   // Order within the returned list is not guaranteed, so match by content.
+  //
+  // `actions` is checked as well as `resource_type`: a permission that came back
+  // with the right resource type but its actions dropped would satisfy a
+  // resource_type-only assertion. setsubtract() rather than an equality check, so
+  // the assertion still holds if the API ever returns implied actions in addition
+  // to the requested ones.
   assert {
     condition = anytrue([
-      for p in output.custom_role_permissions : p.resources.resource_type == "accounts"
+      for p in output.custom_role_permissions :
+      p.resources.resource_type == "accounts" &&
+      length(setsubtract(["cloud.account.get", "cloud.user.list"], p.actions)) == 0
     ])
-    error_message = "no permission came back with resource_type 'accounts'"
+    error_message = "no permission came back with resource_type 'accounts' carrying both requested actions"
   }
 
   assert {
     condition = anytrue([
-      for p in output.custom_role_permissions : p.resources.resource_type == "namespaces"
+      for p in output.custom_role_permissions :
+      p.resources.resource_type == "namespaces" &&
+      length(setsubtract(["cloud.namespace.get"], p.actions)) == 0
     ])
-    error_message = "no permission came back with resource_type 'namespaces'"
+    error_message = "no permission came back with resource_type 'namespaces' carrying the requested action"
   }
 }
 
@@ -159,13 +169,16 @@ run "update_permissions" {
     error_message = "expected 3 permissions after the update, got ${length(output.custom_role_permissions)}"
   }
 
-  // The scoped permission kept the namespace ID it was given.
+  // The scoped permission kept both the namespace ID and the actions it was
+  // given. Matching on the ID alone would pass for an entry that arrived scoped
+  // correctly but empty.
   assert {
     condition = anytrue([
       for p in output.custom_role_permissions :
-      try(contains(p.resources.resource_ids, run.setup.namespace_id), false)
+      try(contains(p.resources.resource_ids, run.setup.namespace_id), false) &&
+      length(setsubtract(["cloud.namespace.update", "cloud.namespace.updateTags"], p.actions)) == 0
     ])
-    error_message = "no permission came back scoped to the namespace fixture's ID"
+    error_message = "no permission came back scoped to the namespace fixture's ID with both requested actions"
   }
 }
 
@@ -202,5 +215,17 @@ run "shrink_permissions" {
   assert {
     condition     = length(output.custom_role_permissions) == 1
     error_message = "an update should replace the permission set, but ${length(output.custom_role_permissions)} permissions remain"
+  }
+
+  // Not just the count: the survivor must be the permission this block asked
+  // for. One stale permission left behind from the previous set would also leave
+  // exactly one. alltrue() over a list already asserted to hold one element
+  // makes this an exact match.
+  assert {
+    condition = alltrue([
+      for p in output.custom_role_permissions :
+      p.resources.resource_type == "accounts" && contains(p.actions, "cloud.account.get")
+    ])
+    error_message = "the permission left after the update is not the one the update requested"
   }
 }
