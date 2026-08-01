@@ -55,7 +55,7 @@ for dir in examples/*/; do
     }gmxe
   ' "$tmp"/*.tf
 
-  # Guard: if the rewrite matched nothing, the published
+  # Guard: if the rewrite matched nothing, this would validate the published
   # module and silently lose the whole point of this script.
   if grep -q 'terraform-temporalcloud-modules/' "$tmp"/*.tf; then
     echo "ERROR: $dir still references the registry after rewrite." >&2
