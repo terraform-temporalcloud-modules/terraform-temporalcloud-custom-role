@@ -2,6 +2,29 @@
 
 Not usage examples — see [examples/](../examples) for those.
 
+## Known gap: the apply tests have never passed
+
+Every run of `*.tftest.hcl` against the current test account has failed the same way:
+
+```text
+Error: Failed to create custom role
+rpc error: code = PermissionDenied desc = request unauthorized
+```
+
+The `setup` run block creates a namespace successfully with the same API key, so the key does have
+account-level write access — custom roles specifically are refused. That points at the key's role or
+an account entitlement, not at this module.
+
+**The Apply Tests badge is therefore red, deliberately.** Nothing below has been confirmed against a
+live account, including the six `resource_type` values, which were verified from provider source
+only.
+
+**Do not "fix" this by converting the suite to plan-only, deleting a run block, or folding the
+coverage into `tests/local/`.** The tests are correct and are kept as written on purpose: the day an
+API key that can manage custom roles is available, running them unchanged is the entire point. A red
+badge naming a real, understood gap is worth more than a green one that proves nothing. Everything
+below describes coverage the suite *will* provide once it can run.
+
 | Path | Runs on | Credentials |
 | --- | --- | --- |
 | `local/` | every pull request | no |
