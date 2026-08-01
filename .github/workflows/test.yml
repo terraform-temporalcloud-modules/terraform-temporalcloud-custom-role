@@ -1,0 +1,78 @@
+name: Apply Tests
+
+# These tests CREATE AND DESTROY REAL Temporal Cloud namespaces and bill the
+# account, so they are deliberately not part of the PR gate:
+#
+#   - forked PRs cannot read secrets, so the job would fail for contributors
+#   - namespace creation is slow, and accounts cap how many can exist
+#   - every PR would cost money
+#
+# They DO run on main after Pre-Commit passes, because a release must not be
+# published from code the apply tests reject. Release is chained after this
+# workflow, so the sequence on a merge is:
+#
+#   push to main -> Pre-Commit -> Apply Tests -> Release
+#
+# Any failure in the chain stops the release.
+on:
+  workflow_run:
+    workflows: ['Pre-Commit']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Mondays 06:00 UTC.
+    - cron: '0 6 * * 1'
+
+# Serialize. Two concurrent runs would compete for the account's namespace quota.
+# cancel-in-progress MUST stay false: cancelling mid-apply would abandon a real
+# namespace with no destroy, leaking cost.
+concurrency:
+  group: apply-tests
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: terraform test
+    runs-on: ubuntu-latest
+    # Never bill the account from a fork, and when chained after Pre-Commit only
+    # proceed if that run actually passed.
+    if: >-
+      github.repository_owner == 'terraform-temporalcloud-modules' &&
+      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_wrapper: false
+
+      # First real step: prove the API answers and the key is accepted. Without
+      # this, a missing, expired or wrong-account key surfaces minutes later as a
+      # namespace that would not create, which reads as a test failure rather than
+      # a credentials problem.
+      - name: API liveness check
+        env:
+          TEMPORAL_CLOUD_API_KEY: ${{ secrets.TEMPORAL_CLOUD_API_KEY }}
+        run: scripts/check-api.sh
+
+      - name: Init
+        run: terraform init -backend=false
+
+      # terraform test tears down what it created, including after a failed
+      # assertion. A cancelled or crashed runner can still orphan a namespace, so
+      # check the account if this job does not finish cleanly.
+      - name: Test
+        env:
+          TEMPORAL_CLOUD_API_KEY: ${{ secrets.TEMPORAL_CLOUD_API_KEY }}
+        run: terraform test -verbose
+
+      # Runs even when the tests fail, because that is exactly when something may
+      # have been left behind.
+      - name: Check for leftover namespaces
+        if: always()
+        env:
+          TEMPORAL_CLOUD_API_KEY: ${{ secrets.TEMPORAL_CLOUD_API_KEY }}
+        run: scripts/check-orphans.sh

@@ -1,0 +1,102 @@
+# Tests
+
+Not usage examples — see [examples/](../examples) for those.
+
+| Path | Runs on | Credentials |
+| --- | --- | --- |
+| `local/` | every pull request | no |
+| `*.tftest.hcl` | on demand, weekly | **yes** |
+| `setup/` | helper for `*.tftest.hcl` | no |
+
+`local/` passes every module input and references every output, so `terraform
+validate` fails there as soon as the variable surface changes.
+
+`*.tftest.hcl` applies against a real Temporal Cloud account, which is the only
+way to catch the API rejecting a configuration that type-checks. Between them they
+cover the whole module input surface:
+
+| File | Covers |
+| --- | --- |
+| `custom_role.tftest.hcl` | Create a role with `allow_all` permissions on two resource types; update it in place to change the description and add a permission scoped by `resource_ids`; then shrink the permission set to prove an update replaces it rather than merging |
+| `wrappers.tftest.hcl` | The `wrappers` submodule: two roles from one call, with per-item overrides |
+| `disabled.tftest.hcl` | `create_custom_role = false` creates nothing and every output falls back |
+
+Fixtures: `setup/` generates a unique role name and, when
+`create_namespace_fixture` is true, creates a namespace whose ID the scoped
+permission can point at. `orphan-check/` reports leftovers and creates nothing.
+
+## Why the namespace fixture exists
+
+Temporal Cloud rejects a `resource_ids` entry that does not name a resource
+already in the account, so the scoped form of a permission cannot be applied
+against a placeholder. No data source enumerates namespaces that are guaranteed
+to be present on an arbitrary account, so the suite creates one rather than
+borrowing one.
+
+It is off by default and switched on only by the run block that needs it, so the
+whole suite creates one namespace rather than one per file.
+
+## What is not apply-tested
+
+`timeouts` is passed on every run block but never exercised at its limits — a
+5-minute create timeout is not reached in practice, so nothing proves the
+duration is honoured. Only that the provider accepts the block.
+
+The 20-permission cap and the 256-character description limit are enforced by
+this module's variable validation, which runs before the provider is configured.
+They are checked at plan rather than on apply, so no run block spends money
+proving the API agrees.
+
+## Cleanup has a gap
+
+`terraform test` destroys what it created, including after a failed assertion,
+but a cancelled or crashed run can orphan resources. The CI workflow runs
+`scripts/check-orphans.sh` afterwards — always, including when the tests fail,
+since that is when something is most likely to be left behind.
+
+**It can only see the namespace fixture.** The provider exposes no data source
+that enumerates custom roles, so a leftover role is invisible to Terraform. If a
+run is cancelled mid-apply, check Settings > Custom Roles in the Temporal Cloud
+UI by hand.
+
+```bash
+scripts/check-orphans.sh
+```
+
+Test resources are prefixed so they are identifiable:
+
+| Prefix | Created by |
+| --- | --- |
+| `yulei-tftest-<random>` | `*.tftest.hcl` — both the roles and the namespace fixture |
+| `yulei-tflocal-*` | `local/`, only if applied by hand — CI never applies it |
+
+Anything matching those prefixes that no live configuration owns can be deleted.
+
+Role names are not unique within an account, so a leftover role and a fresh one
+can share a name. Delete by role ID where the UI offers it.
+
+The `examples/` directories are not covered by this prefix; they create
+`ex-complete` and `ex-read-only`. Example code is published to the Terraform
+Registry, so it carries no test-specific naming. Check for those two separately if
+you have applied an example by hand.
+
+## Running the apply tests
+
+```bash
+export TEMPORAL_CLOUD_API_KEY="<key for a scratch account>"
+terraform init
+terraform test -verbose
+```
+
+Point them at a scratch account: they create and destroy **real, billable**
+resources.
+
+Without a key, every run block is skipped — a cheap way to confirm the test files
+parse:
+
+```text
+Failure! 0 passed, 0 failed, 7 skipped.
+```
+
+[CONTRIBUTING.md](../CONTRIBUTING.md) explains why the layers are split this way
+and which API behaviours they guard against.
