@@ -8,7 +8,7 @@
 # that enumerates them — see the full data source list in the provider docs — so
 # a leftover role is invisible to Terraform and has to be found in the Temporal
 # Cloud UI under Settings > Custom Roles. Roles created by this suite carry the
-# same `yulei-tftest-` prefix as the namespace fixture, so anything reported here
+# same `yulei-tftest-role-` prefix as the namespace fixture, so anything reported here
 # is a hint that a role of the same name may also be orphaned.
 #
 # Run after the apply tests. Anything reported here is a leftover.

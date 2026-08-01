@@ -1,9 +1,9 @@
 output "role_name" {
-  description = "Unique custom role name for this test run, prefixed `yulei-tftest-` so leftovers from an interrupted run are identifiable in the Temporal Cloud account"
+  description = "Unique custom role name for this test run, prefixed `yulei-tftest-role-` so leftovers from an interrupted run are identifiable in the Temporal Cloud account"
   # `yulei-` identifies the owner, `tftest-` distinguishes test roles from
   # anything created by hand. Satisfies the API's constraint: up to 64
   # characters of letters, numbers, hyphens and underscores.
-  value = "yulei-tftest-${random_pet.this.id}"
+  value = "yulei-tftest-role-${random_pet.this.id}"
 }
 
 output "namespace_id" {

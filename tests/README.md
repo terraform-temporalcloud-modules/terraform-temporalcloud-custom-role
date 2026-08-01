@@ -67,7 +67,7 @@ Test resources are prefixed so they are identifiable:
 
 | Prefix | Created by |
 | --- | --- |
-| `yulei-tftest-<random>` | `*.tftest.hcl` — both the roles and the namespace fixture |
+| `yulei-tftest-role-<random>` | `*.tftest.hcl` — both the roles and the namespace fixture |
 | `yulei-tflocal-*` | `local/`, only if applied by hand — CI never applies it |
 
 Anything matching those prefixes that no live configuration owns can be deleted.

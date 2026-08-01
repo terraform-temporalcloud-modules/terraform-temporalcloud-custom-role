@@ -31,7 +31,7 @@ locals {
 resource "temporalcloud_namespace" "fixture" {
   count = var.create_namespace_fixture ? 1 : 0
 
-  name           = "yulei-tftest-${random_pet.this.id}"
+  name           = "yulei-tftest-role-${random_pet.this.id}"
   regions        = [local.region_ids[0]]
   retention_days = 1
   api_key_auth   = true

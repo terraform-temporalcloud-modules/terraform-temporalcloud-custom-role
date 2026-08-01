@@ -28,7 +28,7 @@ role_note() {
   echo >&2
   echo "Custom roles cannot be checked automatically: the provider exposes no data" >&2
   echo "source that lists them. If a run was cancelled mid-apply, check Settings >" >&2
-  echo "Custom Roles in the Temporal Cloud UI for anything named 'yulei-tftest-*'." >&2
+  echo "Custom Roles in the Temporal Cloud UI for anything named 'yulei-tftest-role-*'." >&2
 }
 
 if [ "$count" -eq 0 ]; then

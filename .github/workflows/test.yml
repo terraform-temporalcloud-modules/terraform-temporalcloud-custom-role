@@ -22,7 +22,7 @@ on:
   workflow_dispatch:
   schedule:
     # Mondays 06:00 UTC.
-    - cron: '0 6 * * 1'
+    - cron: '0 9 * * 1'
 
 # Serialize. Two concurrent runs would compete for the account's namespace quota.
 # cancel-in-progress MUST stay false: cancelling mid-apply would abandon a real
