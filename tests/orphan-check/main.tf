@@ -16,8 +16,11 @@
 data "temporalcloud_namespaces" "all" {}
 
 locals {
+  # The data source returns null, not an empty list, when the account holds no
+  # namespaces. Iterating that raises "Iteration over null value" and fails the
+  # check on exactly the accounts with nothing to report, so coalesce first.
   orphans = [
-    for n in data.temporalcloud_namespaces.all.namespaces : n.name
+    for n in coalesce(data.temporalcloud_namespaces.all.namespaces, []) : n.name
     if startswith(n.name, var.test_namespace_prefix)
   ]
 }
